@@ -1,0 +1,115 @@
+---
+- name: Wordpress Install
+  hosts: remote
+  remote_user: root
+  gather_facts: false
+  vars:
+   ansible_password: redhat
+  tasks:
+    - name: Install
+      yum:
+       name:
+         - httpd
+         - mariadb
+         - mariadb-server
+         - php
+         - php-common
+         - php-mysql
+         - php-gd
+         - php-xml
+         - php-mbstring
+         - php-mcrypt
+         - php-xmlrpc
+         - unzip
+         - wget
+         - python-pip
+       state: latest
+    - name: Enable Service
+      systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - httpd
+        - mariadb
+    - name: Firewall
+      firewalld:
+        service: http
+        permanent: true
+        state: enabled
+        immediate: true
+    - name: Install PyMySql
+      pip:
+        name: PyMySQL
+    - name: MySQL
+      mysql_user:
+        name: root
+        password: abc
+        login_user: root
+        login_password: abc
+    - name: Avoid Error
+      block: 
+       - name: Copy dump.sql to Serverx
+         copy:
+            src: dump.sql
+            dest: /tmp
+    
+       - name: Execute Command SQL
+         mysql_db:
+          name: mysql
+          login_user: root
+          login_password: abc
+          state: import
+          target: /tmp/dump.sql
+      rescue:
+        - debug: msg="bye"
+    - name: Download and Extract tar file
+      unarchive:
+        src: https://wordpress.org/wordpress-5.0.tar.gz
+        remote_src: yes
+        dest: /var/www/html/
+    - name: change file owner
+      file:
+        path: /var/www/html/wordpress
+        recurse: yes
+        owner: apache
+        group: apache
+    - name: chmod
+      file:
+        path: /var/www/html/wordpress
+        recurse: yes
+        owner: root
+        group: root
+        mode: '755'
+    - name: Make directory
+      file:
+       path: /var/www/html/wordpress/wp-content/uploads
+       state: directory
+       recurse: yes
+    - name: Set Apache Owner
+      file:
+       path: /var/www/html/wordpress/wp-content/uploads
+       owner: apache
+       recurse: yes
+    - name: Block file not found
+      block:
+       - name: Copy files from foo to bar
+         file:
+          src: /var/www/html/wordpress/wp-config-sample.php
+          path: /var/www/html/wordpress/wp-config.php
+          state: hard
+      rescue:
+       - debug: msg="error"
+    - name: Edit text
+      lineinfile:
+        path: /var/www/html/wordpress/wp-config.php
+        regexp: ^define\({{ item.var }}
+        line: "define({{ item.var }},{{ item.name }});"
+      loop:
+        - { var: "\'DB_NAME\'" , name: "\'wordpress\'"  }
+        - { var: "\'DB_USER\'" , name: "\'ansible\'"  }
+        - { var: "\'DB_PASSWORD\'" , name: "\'mypassword\'"  }
+        - { var: "\'DB_HOST\'" , name: "\'localhost\'"  }
+
+
+      
